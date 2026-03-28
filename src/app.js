@@ -124,6 +124,31 @@ function buildEmptyCollisionMap() {
   return Array.from({ length: GRID_ROWS }, () => Array.from({ length: GRID_COLS }, () => 0));
 }
 
+function cloneData(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value));
+}
+
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeMap(inputMap) {
   if (!Array.isArray(inputMap)) {
     return buildEmptyMap();
@@ -181,6 +206,7 @@ function normalizeProject(inputProject) {
       completed: Boolean(inputProject?.onboarding?.completed),
     },
     shareToken: inputProject?.shareToken || "",
+    shareUrl: inputProject?.shareUrl || "",
     comments: Array.isArray(inputProject?.comments) ? inputProject.comments : [],
   };
 }
@@ -538,7 +564,7 @@ function readSnapshots() {
     return [];
   }
 
-  const raw = localStorage.getItem(key);
+  const raw = readStorage(key);
   if (!raw) {
     return [];
   }
@@ -557,11 +583,21 @@ function writeSnapshots(snapshots) {
     return;
   }
 
-  localStorage.setItem(key, JSON.stringify(snapshots));
+  writeStorage(key, JSON.stringify(snapshots));
 }
 
 function writeSharedProject(token, payload) {
-  localStorage.setItem(`${SHARE_KEY_PREFIX}${token}`, JSON.stringify(payload));
+  writeStorage(`${SHARE_KEY_PREFIX}${token}`, JSON.stringify(payload));
+}
+
+function buildShareUrl(payload, token) {
+  const currentUrl = new URL(window.location.href);
+  const basePath = currentUrl.pathname.endsWith("/")
+    ? currentUrl.pathname
+    : currentUrl.pathname.replace(/[^/]*$/, "");
+  const sharePageUrl = `${currentUrl.origin}${basePath}share.html`;
+  const data = encodeURIComponent(JSON.stringify(payload));
+  return `${sharePageUrl}#data=${data}&token=${encodeURIComponent(token)}`;
 }
 
 function renderSnapshotList() {
@@ -654,8 +690,10 @@ function renderFeedback() {
     return;
   }
 
-  if (state.project.shareToken) {
-    dom.shareLink.textContent = `[share] src/share.html?share=${state.project.shareToken}`;
+  if (state.project.shareUrl) {
+    dom.shareLink.textContent = `[share] ${state.project.shareUrl}`;
+  } else if (state.project.shareToken) {
+    dom.shareLink.textContent = `[share] share.html?share=${state.project.shareToken}`;
   } else {
     dom.shareLink.textContent = "[share] 尚未生成";
   }
@@ -677,7 +715,7 @@ function saveProject() {
   }
 
   state.project.savedAt = nowStamp();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.project));
+  writeStorage(STORAGE_KEY, JSON.stringify(state.project));
   dom.saveStatus.textContent = `已保存 ${state.project.savedAt}`;
   refreshMeta();
 }
@@ -736,7 +774,7 @@ function createProject() {
 }
 
 function loadLastProject() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = readStorage(STORAGE_KEY);
   if (!raw) {
     logEvent("autosave_recovered: no_saved_project");
     return;
@@ -879,10 +917,12 @@ function generateShareLink() {
   }
 
   state.project.shareToken = Math.random().toString(36).slice(2, 10);
-  writeSharedProject(state.project.shareToken, buildSharePayload());
+  const payload = buildSharePayload();
+  state.project.shareUrl = buildShareUrl(payload, state.project.shareToken);
+  writeSharedProject(state.project.shareToken, payload);
   renderFeedback();
   scheduleAutosave();
-  logEvent(`share_link: generated=${state.project.shareToken}`);
+  logEvent(`share_link: generated=${state.project.shareToken}, transport=hash+token`);
 }
 
 function addComment() {
@@ -902,6 +942,11 @@ function addComment() {
     at: nowStamp(),
   });
   dom.commentInput.value = "";
+  if (state.project.shareToken) {
+    const payload = buildSharePayload();
+    state.project.shareUrl = buildShareUrl(payload, state.project.shareToken);
+    writeSharedProject(state.project.shareToken, payload);
+  }
   renderFeedback();
   refreshMeta();
   scheduleAutosave();
@@ -926,15 +971,16 @@ function createSnapshot() {
   const snapshots = readSnapshots();
   const snapshot = {
     createdAt: nowStamp(),
-    map: structuredClone(state.project.map),
-    decorMap: structuredClone(state.project.decorMap),
-    collisionMap: structuredClone(state.project.collisionMap),
-    logicRules: structuredClone(state.project.logicRules),
-    assets: structuredClone(state.project.assets),
-    objectConfig: structuredClone(state.project.objectConfig),
-    onboarding: structuredClone(state.project.onboarding),
+    map: cloneData(state.project.map),
+    decorMap: cloneData(state.project.decorMap),
+    collisionMap: cloneData(state.project.collisionMap),
+    logicRules: cloneData(state.project.logicRules),
+    assets: cloneData(state.project.assets),
+    objectConfig: cloneData(state.project.objectConfig),
+    onboarding: cloneData(state.project.onboarding),
     shareToken: state.project.shareToken,
-    comments: structuredClone(state.project.comments),
+    shareUrl: state.project.shareUrl,
+    comments: cloneData(state.project.comments),
     summary: {
       filledTiles,
       rules: state.project.logicRules.length,
@@ -970,15 +1016,16 @@ function restoreLatestSnapshot() {
     return;
   }
 
-  state.project.map = structuredClone(selectedSnapshot.map);
-  state.project.decorMap = structuredClone(selectedSnapshot.decorMap ?? buildEmptyMap());
-  state.project.collisionMap = structuredClone(selectedSnapshot.collisionMap ?? buildEmptyCollisionMap());
-  state.project.logicRules = structuredClone(selectedSnapshot.logicRules);
-  state.project.assets = structuredClone(selectedSnapshot.assets);
-  state.project.objectConfig = structuredClone(selectedSnapshot.objectConfig);
-  state.project.onboarding = structuredClone(selectedSnapshot.onboarding);
+  state.project.map = cloneData(selectedSnapshot.map);
+  state.project.decorMap = cloneData(selectedSnapshot.decorMap ?? buildEmptyMap());
+  state.project.collisionMap = cloneData(selectedSnapshot.collisionMap ?? buildEmptyCollisionMap());
+  state.project.logicRules = cloneData(selectedSnapshot.logicRules);
+  state.project.assets = cloneData(selectedSnapshot.assets);
+  state.project.objectConfig = cloneData(selectedSnapshot.objectConfig);
+  state.project.onboarding = cloneData(selectedSnapshot.onboarding);
   state.project.shareToken = selectedSnapshot.shareToken;
-  state.project.comments = structuredClone(selectedSnapshot.comments);
+  state.project.shareUrl = selectedSnapshot.shareUrl || "";
+  state.project.comments = cloneData(selectedSnapshot.comments);
 
   renderEditorScene();
   renderCompositeMap(previewCtx, state.project, false);
@@ -1165,6 +1212,7 @@ function buildExportPayload() {
     objectConfig: state.project.objectConfig,
     onboarding: state.project.onboarding,
     shareToken: state.project.shareToken,
+    shareUrl: state.project.shareUrl,
     comments: state.project.comments,
     exportedAt: nowStamp(),
   };
@@ -1172,6 +1220,7 @@ function buildExportPayload() {
 
 function buildSharePayload() {
   return {
+    schemaVersion: SCHEMA_VERSION,
     name: state.project.name,
     template: state.project.template,
     map: state.project.map,
@@ -1230,15 +1279,57 @@ function buildStandaloneHtml(payload) {
     const ctx = canvas.getContext('2d');
     const logEl = document.getElementById('log');
     const metaEl = document.getElementById('meta');
-    metaEl.textContent = JSON.stringify(payload.objectConfig, null, 2);
+    const runBtn = document.getElementById('runBtn');
+    const pressed = new Set();
+    let frameId = 0;
+    let running = false;
+    let coins = 0;
+
+    const player = {
+      x: 8,
+      y: 8,
+      hp: Number(payload.objectConfig?.hp ?? 100),
+      animation: payload.objectConfig?.animation ?? 'idle',
+    };
+
+    function log(message) {
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      logEl.textContent = '[' + time + '] ' + message + '\n' + logEl.textContent;
+    }
+
     function getTile(x, y) {
       const decor = payload.decorMap?.[y]?.[x] ?? 0;
-      return decor !== 0 ? decor : payload.map[y][x];
+      return decor !== 0 ? decor : (payload.map?.[y]?.[x] ?? 0);
     }
-    function draw() {
-      for (let y = 0; y < payload.map.length; y += 1) {
-        for (let x = 0; x < payload.map[y].length; x += 1) {
-          ctx.fillStyle = colors[getTile(x, y)];
+
+    function isSolid(v) {
+      return v === 1 || v === 2;
+    }
+
+    function canMove(nextX, nextY) {
+      const points = [
+        { x: nextX, y: nextY },
+        { x: nextX + TILE - 17, y: nextY },
+        { x: nextX, y: nextY + TILE - 17 },
+        { x: nextX + TILE - 17, y: nextY + TILE - 17 },
+      ];
+
+      return points.every((p) => {
+        const gx = Math.floor(p.x / TILE);
+        const gy = Math.floor(p.y / TILE);
+        if (gx < 0 || gy < 0 || gy >= payload.map.length || gx >= payload.map[0].length) {
+          return false;
+        }
+        return !(payload.collisionMap?.[gy]?.[gx]) && !isSolid(getTile(gx, gy));
+      });
+    }
+
+    function drawWorld() {
+      const rows = payload.map.length;
+      const cols = payload.map[0].length;
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          ctx.fillStyle = colors[getTile(x, y)] ?? colors[0];
           ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
           ctx.strokeStyle = 'rgba(86,109,176,0.3)';
           ctx.strokeRect(x * TILE, y * TILE, TILE, TILE);
@@ -1248,10 +1339,126 @@ function buildStandaloneHtml(payload) {
           }
         }
       }
-      logEl.textContent = '[preview] standalone bundle loaded\n' + logEl.textContent;
+
+      ctx.fillStyle = '#5ad1e6';
+      ctx.fillRect(player.x, player.y, TILE - 16, TILE - 16);
+      metaEl.textContent = JSON.stringify({
+        speed: Number(payload.objectConfig?.speed ?? 8),
+        hp: player.hp,
+        coins,
+        animation: player.animation,
+      }, null, 2);
     }
-    document.getElementById('runBtn').addEventListener('click', draw);
-    draw();
+
+    function spawnCoinRandomly() {
+      const emptyTiles = [];
+      for (let y = 0; y < payload.map.length; y += 1) {
+        for (let x = 0; x < payload.map[y].length; x += 1) {
+          if (getTile(x, y) === 0 && !(payload.collisionMap?.[y]?.[x])) {
+            emptyTiles.push({ x, y });
+          }
+        }
+      }
+
+      if (!emptyTiles.length) {
+        return false;
+      }
+
+      const selected = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+      payload.decorMap[selected.y][selected.x] = 3;
+      return true;
+    }
+
+    function consume() {
+      const cx = Math.floor((player.x + 8) / TILE);
+      const cy = Math.floor((player.y + 8) / TILE);
+      if (cx < 0 || cy < 0 || cy >= payload.map.length || cx >= payload.map[0].length) {
+        return;
+      }
+
+      const tile = getTile(cx, cy);
+      if (tile === 3) {
+        if ((payload.decorMap?.[cy]?.[cx] ?? 0) !== 0) {
+          payload.decorMap[cy][cx] = 0;
+        } else {
+          payload.map[cy][cx] = 0;
+        }
+        coins += 1;
+        log('coin_collected: total=' + coins);
+      }
+
+      if (tile === 4) {
+        player.hp = Math.max(0, player.hp - 10);
+        log('enemy_hit: hp=' + player.hp);
+      }
+    }
+
+    function tick() {
+      if (!running) {
+        return;
+      }
+
+      const speed = Math.max(1, Number(payload.objectConfig?.speed ?? 8)) * 0.35;
+      let dx = 0;
+      let dy = 0;
+
+      if (pressed.has('ArrowLeft') || pressed.has('KeyA')) dx -= speed;
+      if (pressed.has('ArrowRight') || pressed.has('KeyD')) dx += speed;
+      if (pressed.has('ArrowUp') || pressed.has('KeyW')) dy -= speed;
+      if (pressed.has('ArrowDown') || pressed.has('KeyS')) dy += speed;
+
+      player.animation = (dx !== 0 || dy !== 0) ? 'run' : (payload.objectConfig?.animation ?? 'idle');
+
+      const maxX = payload.map[0].length * TILE - (TILE - 16);
+      const maxY = payload.map.length * TILE - (TILE - 16);
+      const nextX = Math.max(0, Math.min(player.x + dx, maxX));
+      const nextY = Math.max(0, Math.min(player.y + dy, maxY));
+
+      if (canMove(nextX, player.y)) player.x = nextX;
+      if (canMove(player.x, nextY)) player.y = nextY;
+
+      consume();
+      drawWorld();
+      frameId = window.requestAnimationFrame(tick);
+    }
+
+    window.addEventListener('keydown', (event) => {
+      pressed.add(event.code);
+      const rules = Array.isArray(payload.logicRules) ? payload.logicRules : [];
+      rules
+        .filter((rule) => rule.event === 'key_press' && String(rule.key).toLowerCase() === event.code.toLowerCase())
+        .forEach((rule) => {
+          if (rule.action === 'log_message') {
+            log('rule_triggered: ' + rule.key + ' -> log_message');
+          }
+          if (rule.action === 'spawn_coin') {
+            const ok = spawnCoinRandomly();
+            log('rule_triggered: ' + rule.key + ' -> spawn_coin, success=' + ok);
+          }
+        });
+    });
+
+    window.addEventListener('keyup', (event) => {
+      pressed.delete(event.code);
+    });
+
+    function runPreview() {
+      if (running) {
+        running = false;
+        if (frameId) {
+          window.cancelAnimationFrame(frameId);
+          frameId = 0;
+        }
+      }
+      running = true;
+      log('preview_started: standalone_runtime');
+      drawWorld();
+      tick();
+    }
+
+    runBtn.addEventListener('click', runPreview);
+    drawWorld();
+    log('preview_ready: use WASD or Arrow Keys');
   </script>
 </body>
 </html>`;
@@ -1322,6 +1529,22 @@ window.addEventListener("mouseup", () => {
 window.addEventListener("keydown", handlePreviewKey);
 window.addEventListener("keyup", handlePreviewKeyUp);
 
+function tryAutoRecover() {
+  const raw = readStorage(STORAGE_KEY);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    applyProjectState(parsed, "autosave_recovered_auto");
+    setSaveStatus(`已自动恢复 ${state.project.savedAt ?? state.project.createdAt}`);
+  } catch (error) {
+    setSaveStatus("自动恢复失败");
+    logEvent(`autosave_recovered_auto_error: ${String(error)}`);
+  }
+}
+
 // 初始化空画布，方便用户直接上手。
 drawGrid(ctx, buildEmptyMap());
 drawGrid(previewCtx, buildEmptyMap());
@@ -1331,3 +1554,4 @@ renderAssetList();
 renderSnapshotList();
 renderGuideList();
 renderFeedback();
+tryAutoRecover();

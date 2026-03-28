@@ -23,12 +23,38 @@ function getShareToken() {
   return url.searchParams.get("share") || "";
 }
 
+function getSharePayloadFromHash() {
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : "";
+  if (!hash) {
+    return null;
+  }
+
+  const params = new URLSearchParams(hash);
+  const rawData = params.get("data");
+  if (!rawData) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(decodeURIComponent(rawData));
+  } catch {
+    return null;
+  }
+}
+
 function readSharedProject(token) {
   if (!token) {
     return null;
   }
 
-  const raw = localStorage.getItem(`${SHARE_KEY_PREFIX}${token}`);
+  let raw = null;
+  try {
+    raw = localStorage.getItem(`${SHARE_KEY_PREFIX}${token}`);
+  } catch {
+    raw = null;
+  }
   if (!raw) {
     return null;
   }
@@ -92,7 +118,8 @@ function renderMissing() {
 }
 
 const token = getShareToken();
-const project = readSharedProject(token);
+const projectFromHash = getSharePayloadFromHash();
+const project = projectFromHash || readSharedProject(token);
 if (project) {
   renderProject(project);
 } else {

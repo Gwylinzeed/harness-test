@@ -1,0 +1,9 @@
+{
+  "name": "retroforge-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RetroForge smoke tests",
+  "scripts": {
+    "test:smoke": "node --test tests/smoke.test.cjs"
+  }
+}
