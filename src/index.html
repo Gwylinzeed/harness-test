@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroForge MVP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>RetroForge</h1>
+    <div class="status" id="saveStatus">未保存</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel project-panel">
+      <h2>项目</h2>
+      <label for="projectName">项目名</label>
+      <input id="projectName" type="text" placeholder="例如: space-adventure">
+
+      <label for="templateSelect">模板</label>
+      <select id="templateSelect">
+        <option value="blank">空白模板</option>
+        <option value="platformer">平台跳跃模板</option>
+        <option value="dungeon">地牢探索模板</option>
+      </select>
+
+      <div class="row">
+        <button id="createProjectBtn" class="primary">创建项目</button>
+        <button id="loadProjectBtn">加载最近项目</button>
+      </div>
+      <div class="row">
+        <input id="importProjectInput" type="file" accept="application/json">
+        <button id="importProjectBtn">导入项目</button>
+      </div>
+      <div class="row">
+        <select id="exportFormat">
+          <option value="json">导出 JSON</option>
+          <option value="html">导出 HTML 包</option>
+        </select>
+        <button id="exportProjectBtn">导出项目</button>
+      </div>
+
+      <div id="projectMeta" class="meta">未创建项目</div>
+
+      <div class="subpanel">
+        <h3>资源管理</h3>
+        <input id="assetInput" type="file" multiple accept="image/*,audio/*">
+        <input id="assetSearchInput" type="text" placeholder="搜索资源名或类型">
+        <button id="importAssetsBtn">导入资源</button>
+        <pre id="assetList" class="log">[asset] 暂无资源</pre>
+      </div>
+
+      <div class="subpanel">
+        <h3>版本快照</h3>
+        <select id="snapshotSelect">
+          <option value="">选择快照</option>
+        </select>
+        <div class="row">
+          <button id="snapshotBtn">创建快照</button>
+          <button id="restoreSnapshotBtn">回退选中快照</button>
+        </div>
+        <pre id="snapshotList" class="log">[snapshot] 暂无快照</pre>
+      </div>
+
+      <div class="subpanel">
+        <h3>新手引导</h3>
+        <div class="row">
+          <button id="startGuideBtn">开始引导</button>
+          <button id="nextGuideStepBtn">完成当前步骤</button>
+        </div>
+        <pre id="guideList" class="log">[guide] 未开始</pre>
+      </div>
+
+      <div class="subpanel">
+        <h3>协作反馈（轻量）</h3>
+        <div class="row">
+          <button id="genShareBtn">生成只读分享链接</button>
+        </div>
+        <pre id="shareLink" class="log">[share] 尚未生成</pre>
+        <input id="commentInput" type="text" placeholder="输入反馈评论">
+        <button id="addCommentBtn">添加评论</button>
+        <pre id="commentList" class="log">[comment] 暂无评论</pre>
+      </div>
+    </section>
+
+    <section class="panel editor-panel">
+      <h2>场景编辑器</h2>
+      <div class="toolbar">
+        <label for="layerPicker">图层</label>
+        <select id="layerPicker">
+          <option value="base">基础层</option>
+          <option value="decor">装饰层</option>
+          <option value="collision">碰撞层</option>
+        </select>
+        <label for="tilePicker">图块</label>
+        <select id="tilePicker">
+          <option value="0">空</option>
+          <option value="1">地面</option>
+          <option value="2">砖块</option>
+          <option value="3">金币</option>
+          <option value="4">敌人</option>
+        </select>
+        <button id="toggleCollisionBtn">隐藏碰撞层</button>
+        <button id="clearMapBtn">清空当前层</button>
+      </div>
+      <div class="subpanel">
+        <h3>角色/对象属性</h3>
+        <div class="logic-row">
+          <label for="objSpeed">速度</label>
+          <input id="objSpeed" type="number" min="1" max="30" value="8">
+        </div>
+        <div class="logic-row">
+          <label for="objHp">生命值</label>
+          <input id="objHp" type="number" min="1" max="999" value="100">
+        </div>
+        <div class="logic-row">
+          <label for="objAnim">动画状态</label>
+          <select id="objAnim">
+            <option value="idle">idle</option>
+            <option value="run">run</option>
+            <option value="jump">jump</option>
+          </select>
+        </div>
+        <div class="logic-row">
+          <label for="objTrigger">触发器</label>
+          <input id="objTrigger" type="text" value="onCollect" placeholder="例如 onCollect">
+        </div>
+        <button id="applyObjectBtn">应用对象属性</button>
+      </div>
+      <canvas id="mapCanvas" width="640" height="400" aria-label="tilemap editor"></canvas>
+      <p class="hint">左键绘制，右键擦除。网格：20 x 12，每格 32px。碰撞层使用红色遮罩显示。</p>
+    </section>
+
+    <section class="panel preview-panel">
+      <h2>预览</h2>
+      <div class="row">
+        <button id="previewBtn" class="primary">运行预览</button>
+        <button id="pausePreviewBtn">暂停预览</button>
+        <button id="resetPreviewBtn">重置预览</button>
+      </div>
+      <pre id="previewDebug" class="log">[debug] 预览未启动</pre>
+      <div class="logic-builder">
+        <h3>可视化逻辑 (ECA)</h3>
+        <div class="logic-row">
+          <label for="ruleEvent">事件</label>
+          <select id="ruleEvent">
+            <option value="key_press">按键触发</option>
+          </select>
+        </div>
+        <div class="logic-row">
+          <label for="ruleKey">按键</label>
+          <input id="ruleKey" type="text" value="Space" placeholder="例如 Space, KeyE">
+        </div>
+        <div class="logic-row">
+          <label for="ruleAction">动作</label>
+          <select id="ruleAction">
+            <option value="log_message">记录日志</option>
+            <option value="spawn_coin">随机生成金币</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="addRuleBtn">添加规则</button>
+        </div>
+        <pre id="ruleList" class="log">[rule] 暂无规则</pre>
+      </div>
+      <canvas id="previewCanvas" width="640" height="400" aria-label="game preview"></canvas>
+      <pre id="eventLog" class="log">[event] 等待预览...</pre>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
