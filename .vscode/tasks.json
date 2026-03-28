@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "git-commit-current-work",
+			"label": "git-add-all",
 			"type": "shell",
 			"command": "git",
 			"args": [
@@ -11,13 +11,22 @@
 			]
 		},
 		{
-			"label": "git-commit-current-work",
+			"label": "git-commit-step1",
 			"type": "shell",
 			"command": "git",
 			"args": [
 				"commit",
 				"-m",
 				"feat(step-1): add retroforge mvp with import/export schema and sharing pages"
+			]
+		},
+		{
+			"label": "git-add-cleanup-taskfile",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"add",
+				".vscode/tasks.json"
 			]
 		}
 	]
